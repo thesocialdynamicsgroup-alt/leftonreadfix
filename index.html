@@ -1,0 +1,2001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Left on Read Fix</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --card: #1e1e1e;
+    --border: #2a2a2a;
+    --accent: #e8c14a;
+    --accent-dim: rgba(232,193,74,0.12);
+    --accent-dim2: rgba(232,193,74,0.06);
+    --text: #f0f0f0;
+    --muted: #888;
+    --danger: #e05c5c;
+    --danger-dim: rgba(224,92,92,0.12);
+    --green: #5ce07a;
+    --green-dim: rgba(92,224,122,0.10);
+    --tab-h: 52px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 16px 14px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-logo {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .header h1 {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* TABS */
+  .tabs-wrap {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 81px;
+    z-index: 99;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs-wrap::-webkit-scrollbar { display: none; }
+  .tabs {
+    display: flex;
+    min-width: max-content;
+    padding: 0 8px;
+  }
+  .tab {
+    padding: 0 14px;
+    height: var(--tab-h);
+    display: flex;
+    align-items: center;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    letter-spacing: 0.01em;
+    user-select: none;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* PANELS */
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 10px;
+    margin-top: 4px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .card-body {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* TEXT BUBBLE */
+  .text-bubble {
+    background: var(--accent-dim);
+    border: 1px solid rgba(232,193,74,0.2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 10px;
+    line-height: 1.5;
+    position: relative;
+  }
+  .text-bubble.bad {
+    background: var(--danger-dim);
+    border-color: rgba(224,92,92,0.2);
+  }
+  .text-bubble.good {
+    background: var(--green-dim);
+    border-color: rgba(92,224,122,0.2);
+  }
+  .bubble-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .bubble-label.bad { color: var(--danger); }
+  .bubble-label.good { color: var(--green); }
+  .bubble-label.neutral { color: var(--accent); }
+
+  .coaching-note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+  }
+  .coaching-note strong { color: var(--accent); font-weight: 600; }
+
+  /* SITUATION CARDS */
+  .situation-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: border-color 0.15s, background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .situation-btn:active, .situation-btn.open {
+    background: var(--accent-dim2);
+    border-color: rgba(232,193,74,0.3);
+  }
+  .situation-btn .sit-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .situation-btn .sit-arrow {
+    font-size: 16px;
+    color: var(--accent);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-left: 10px;
+  }
+  .situation-btn.open .sit-arrow { transform: rotate(90deg); }
+  .situation-expand {
+    display: none;
+    padding: 0 4px 12px;
+    margin-top: -6px;
+    margin-bottom: 4px;
+  }
+  .situation-expand.open { display: block; }
+
+  /* RULE ITEMS */
+  .rule-item {
+    display: flex;
+    gap: 10px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .rule-item:last-child { border-bottom: none; }
+  .rule-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .rule-text { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+  .rule-text strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; }
+
+  /* DECISION TREE */
+  .tree-node {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    margin-bottom: 8px;
+  }
+  .tree-q {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .tree-a {
+    font-size: 13px;
+    color: var(--accent);
+    padding-left: 12px;
+    border-left: 2px solid var(--accent);
+    line-height: 1.5;
+  }
+
+  /* MINDSET CHIPS */
+  .mindset-chip {
+    background: var(--accent-dim);
+    border: 1px solid rgba(232,193,74,0.18);
+    border-radius: 8px;
+    padding: 13px 14px;
+    margin-bottom: 8px;
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .mindset-chip .chip-title {
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+
+  /* CHECKLIST */
+  .check-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .check-item:last-child { border-bottom: none; }
+  .check-x { color: var(--danger); font-size: 14px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .check-text { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+  .check-text strong { color: var(--text); font-weight: 600; }
+
+  /* TIMING GRID */
+  .timing-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .timing-cell {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 12px;
+    text-align: center;
+  }
+  .timing-time {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .timing-label {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* DIVIDER */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 18px 0;
+  }
+
+  /* PILL TAG */
+  .pill {
+    display: inline-block;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+  }
+  .pill.red {
+    background: var(--danger-dim);
+    color: var(--danger);
+  }
+
+  /* COPY BUTTON */
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.15s;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .copy-btn:active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
+  /* INTRO SECTION */
+  .intro-banner {
+    background: linear-gradient(135deg, rgba(232,193,74,0.10) 0%, rgba(232,193,74,0.03) 100%);
+    border: 1px solid rgba(232,193,74,0.2);
+    border-radius: 14px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+  }
+  .intro-banner h2 {
+    font-size: 17px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .intro-banner p {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* WHERE ARE YOU */
+  .where-option {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 15px 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .where-option:active, .where-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .where-option .wo-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .where-option .wo-sub {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .where-result {
+    display: none;
+    margin-top: 4px;
+  }
+  .where-result.show { display: block; }
+
+  .back-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* QUIZ */
+  .quiz-q-block {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    transition: border-color 0.2s;
+  }
+  .quiz-q-block.answered { border-color: rgba(232,193,74,0.3); }
+  .quiz-q-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 7px;
+  }
+  .quiz-q-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .quiz-option {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 13px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.4;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .quiz-option:last-child { margin-bottom: 0; }
+  .quiz-option .opt-letter {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-top: 1px;
+    width: 16px;
+  }
+  .quiz-option:active { background: var(--accent-dim); }
+  .quiz-option.selected-correct {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--text);
+  }
+  .quiz-option.selected-wrong {
+    background: var(--danger-dim);
+    border-color: var(--danger);
+    color: var(--text);
+  }
+  .quiz-option.reveal-correct {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--text);
+  }
+  .quiz-option.disabled { cursor: default; pointer-events: none; }
+  .quiz-feedback {
+    display: none;
+    margin-top: 11px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: var(--accent-dim2);
+    border: 1px solid rgba(232,193,74,0.15);
+    color: var(--muted);
+  }
+  .quiz-feedback.show { display: block; }
+  .quiz-feedback strong { color: var(--accent); }
+
+  .quiz-progress-bar {
+    background: var(--border);
+    border-radius: 4px;
+    height: 4px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  .quiz-progress-fill {
+    background: var(--accent);
+    height: 100%;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+
+  .quiz-submit-btn {
+    width: 100%;
+    background: var(--accent);
+    color: #0d0d0d;
+    border: none;
+    border-radius: 11px;
+    padding: 15px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    margin-top: 6px;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s;
+  }
+  .quiz-submit-btn:disabled { opacity: 0.35; cursor: default; }
+  .quiz-submit-btn:not(:disabled):active { opacity: 0.8; }
+
+  .quiz-result {
+    display: none;
+    text-align: center;
+    padding: 24px 8px 16px;
+  }
+  .quiz-result.show { display: block; }
+  .quiz-score-ring {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    margin: 0 auto 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 4px solid var(--accent);
+    background: var(--accent-dim);
+  }
+  .quiz-score-ring.grade-bad { border-color: var(--danger); background: var(--danger-dim); }
+  .quiz-score-ring.grade-mid { border-color: #e8914a; background: rgba(232,145,74,0.12); }
+  .quiz-score-ring.grade-good { border-color: #5cb0e0; background: rgba(92,176,224,0.12); }
+  .quiz-score-ring.grade-great { border-color: var(--green); background: var(--green-dim); }
+  .quiz-score-num {
+    font-size: 30px;
+    font-weight: 900;
+    color: var(--text);
+    line-height: 1;
+  }
+  .quiz-score-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 600;
+  }
+  .quiz-grade-title {
+    font-size: 21px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .quiz-grade-sub {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+  .quiz-breakdown {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: left;
+    margin-bottom: 14px;
+  }
+  .quiz-breakdown-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .qb-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .qb-row:last-child { border-bottom: none; }
+  .qb-q { color: var(--muted); flex: 1; padding-right: 10px; line-height: 1.4; }
+  .qb-result { font-weight: 800; font-size: 15px; flex-shrink: 0; }
+  .qb-result.correct { color: var(--green); }
+  .qb-result.wrong { color: var(--danger); }
+
+  .quiz-retake-btn {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .quiz-retake-btn:active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
+  /* QUIZ CTA */
+  .quiz-cta-block {
+    background: linear-gradient(135deg, rgba(232,193,74,0.13) 0%, rgba(232,193,74,0.05) 100%);
+    border: 1px solid rgba(232,193,74,0.35);
+    border-radius: 14px;
+    padding: 20px 18px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .quiz-cta-tag {
+    display: inline-block;
+    background: var(--accent);
+    color: #0d0d0d;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+  }
+  .quiz-cta-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.4;
+    margin-bottom: 8px;
+    letter-spacing: -0.2px;
+  }
+  .quiz-cta-body {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .quiz-cta-btn {
+    display: block;
+    background: var(--accent);
+    color: #0d0d0d;
+    text-decoration: none;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 14px 16px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s;
+  }
+  .quiz-cta-btn:active { opacity: 0.8; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">Coach John · SDG</div>
+  <h1>Left on Read Fix</h1>
+  <div class="header-sub">Know exactly what to do when she goes quiet</div>
+</div>
+
+<div class="tabs-wrap">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('situation')">Your Situation</div>
+    <div class="tab" onclick="switchTab('timing')">Timing Rules</div>
+    <div class="tab" onclick="switchTab('texts')">Fix Texts</div>
+    <div class="tab" onclick="switchTab('avoid')">What NOT to Send</div>
+    <div class="tab" onclick="switchTab('mindset')">Mindset</div>
+    <div class="tab" onclick="switchTab('prevent')">Prevent It</div>
+    <div class="tab" onclick="switchTab('whyreally')">Why She Really Did It</div>
+    <div class="tab" onclick="switchTab('makeover')">Text Makeovers</div>
+    <div class="tab" onclick="switchTab('signals')">Read Her Signals</div>
+    <div class="tab" onclick="switchTab('swipe')">Swipe File</div>
+    <div class="tab" onclick="switchTab('rules')">7 Rules</div>
+    <div class="tab" onclick="switchTab('quiz')">📋 Quiz</div>
+  </div>
+</div>
+
+<!-- ======================== TAB: YOUR SITUATION ======================== -->
+<div class="panel active" id="panel-situation">
+
+  <div id="sit-menu">
+    <div class="intro-banner">
+      <h2>Where are you right now?</h2>
+      <p>Pick your situation and get the exact approach for it — texts, timing, and what it means.</p>
+    </div>
+
+    <div class="section-label">Select your situation</div>
+
+    <div class="where-option" onclick="showSit('first')">
+      <div class="wo-title">Left on read after my first text</div>
+      <div class="wo-sub">She never replied to your opener</div>
+    </div>
+    <div class="where-option" onclick="showSit('flirting')">
+      <div class="wo-title">Left on read while we were flirting</div>
+      <div class="wo-sub">Convo was going well, then silence</div>
+    </div>
+    <div class="where-option" onclick="showSit('date')">
+      <div class="wo-title">Left on read after I tried to set the date</div>
+      <div class="wo-sub">You moved to plan something, she disappeared</div>
+    </div>
+    <div class="where-option" onclick="showSit('interested')">
+      <div class="wo-title">Left on read after she seemed very interested</div>
+      <div class="wo-sub">She was warm and engaged, then went cold</div>
+    </div>
+    <div class="where-option" onclick="showSit('afterdate')">
+      <div class="wo-title">Left on read after the date</div>
+      <div class="wo-sub">The date felt good, now silence</div>
+    </div>
+    <div class="where-option" onclick="showSit('dry')">
+      <div class="wo-title">Left on read after a dry conversation</div>
+      <div class="wo-sub">Convo faded out, now you want to bring it back</div>
+    </div>
+    <div class="where-option" onclick="showSit('question')">
+      <div class="wo-title">Left on read after asking a question</div>
+      <div class="wo-sub">You asked something, she never answered</div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="where-result" id="sit-first">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">First Text No Reply</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">She either wasn't hooked by the opener, her attention moved on, or the text gave her nothing easy to respond to. This is not rejection — it's a low-investment situation on her end. Don't spiral.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — 1 to 2 days later</div>
+      "Had to come back and tell you — I was right about [thing you referenced before]."
+      <div class="coaching-note"><strong>Why it works:</strong> It re-opens without begging for a reply. It's confident and shows you have a life. The callback creates curiosity.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — playful low-pressure</div>
+      "You're either really busy or a terrible texter. I'll assume busy."
+      <div class="coaching-note"><strong>Why it works:</strong> Light humor, no desperation. It gives her an easy entry point and shows you're not sitting around waiting.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — direct and simple</div>
+      "Still down to grab coffee this week?"
+      <div class="coaching-note"><strong>Why it works:</strong> If the original text was going nowhere, skip the small talk and go straight to what matters. One shot, clean energy.</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">If she still doesn't reply</div>
+      <div class="card-body">Send one follow-up maximum. If you've now sent two total with no reply, leave it. You have not lost — you just ran out of interest on her end. Move on without drama.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-flirting">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">Mid-Convo Silence</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">She got distracted, life interrupted, or the last text you sent didn't pull her back in. Mid-convo ghosting is rarely personal. You just need to re-enter with energy, not anxiety.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — next day or two</div>
+      "You completely disappeared on me. 10 points from Gryffindor."
+      <div class="coaching-note"><strong>Why it works:</strong> Light, playful, doesn't beg. Calls out the silence without being bitter. Easy to respond to.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — re-open fresh</div>
+      "Random but I thought of you when I saw [relevant thing]. What are you up to this week?"
+      <div class="coaching-note"><strong>Why it works:</strong> Doesn't reference the silence at all. Creates a fresh moment and immediately moves toward seeing her.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — straight to the point</div>
+      "We should finish this conversation in person. Free Thursday?"
+      <div class="coaching-note"><strong>Why it works:</strong> Converts the unfinished flirt into a date proposal. Confident, clear, gives her a reason to reply.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-date">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">Date Proposal Ghosted</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">She either wasn't ready to commit, the ask felt pressured, or she's on the fence. This is the most revealing silence — it tells you where her investment level really is. Stay calm and give it one clean follow-up.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — 2 to 3 days later</div>
+      "Still figuring out your week? No stress — let me know when you have a window."
+      <div class="coaching-note"><strong>Why it works:</strong> Removes pressure without removing the invite. Shows patience and confidence, not desperation.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — lighten the ask</div>
+      "Just coffee. 45 minutes. You don't even have to bring your A-game."
+      <div class="coaching-note"><strong>Why it works:</strong> Makes the date feel low-stakes. Humor lowers her guard. It's harder to say no to something this casual.</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">If she still doesn't reply</div>
+      <div class="card-body">You've asked. She's aware. If she wants to, she will. Sending more texts now is chasing, and chasing lowers your value. Withdraw your attention and let silence do the work.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-interested">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">Was Warm, Now Cold</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">Hot and cold behavior usually means competing attention, outside circumstances, or she hit a moment of uncertainty. Her warmth was real — but so is her silence. Don't let the memory of how warm she was make you chase.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — 3 to 4 days of silence</div>
+      "Haven't heard from you in a while. Still want to meet up?"
+      <div class="coaching-note"><strong>Why it works:</strong> Direct and non-needy. It forces a real answer. You're not begging — you're checking in once, clearly.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — re-spark without referencing silence</div>
+      "You'd actually hate this place we should definitely go sometime."
+      <div class="coaching-note"><strong>Why it works:</strong> Playful callback to something you discussed. Reactivates the connection without addressing the gap.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-afterdate">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">After-Date Silence</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">After-date silence is one of the most painful because you thought it went well. It might have — but she's either processing, being pulled in different directions, or deciding. Do not over-explain or over-text. One calibrated follow-up is all you get.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — 1 to 2 days later</div>
+      "Had a good time the other night. We should do it again — you around this weekend?"
+      <div class="coaching-note"><strong>Why it works:</strong> Confident, warm, forward. It affirms the date without over-praising it. Includes a clear next move.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — lighter version</div>
+      "That place was better than expected. Round 2?"
+      <div class="coaching-note"><strong>Why it works:</strong> Casual and fun. Not heavy. Keeps momentum without making her feel like you're analyzing the date.</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">If she still doesn't reply</div>
+      <div class="card-body">After a date, one follow-up is the limit. If she's not responding, she's telling you something without words. Accept it with dignity. Don't send a long message about what went wrong — that will cost you more than the silence did.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-dry">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">Dead Conversation Revival</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">You both let it fade. There's no crisis here — just low momentum. The mistake guys make is jumping back in like nothing happened with a boring "hey." You need to re-enter with something worth responding to.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — re-open strong</div>
+      "I know we disappeared on each other. Honestly your fault. Want to make it up to me?"
+      <div class="coaching-note"><strong>Why it works:</strong> Takes ownership playfully and immediately flips the energy. Invites her into a fun back-and-forth instead of a stiff re-intro.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — curiosity hook</div>
+      "Two things happened since we last talked. One of them involves you."
+      <div class="coaching-note"><strong>Why it works:</strong> Creates instant curiosity. She almost has to reply to find out. Use something real and light when she asks.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — skip the awkward, go straight to the meet</div>
+      "Long overdue — we should actually hang. What's your week look like?"
+      <div class="coaching-note"><strong>Why it works:</strong> Doesn't dwell on the gap. Shows confidence and direction. Moves straight to where things should go.</div>
+    </div>
+  </div>
+
+  <div class="where-result" id="sit-question">
+    <button class="back-btn" onclick="backToMenu()">← Back</button>
+    <div class="pill">Unanswered Question</div>
+    <div class="card">
+      <div class="card-title">What probably happened</div>
+      <div class="card-body">A lot of guys ask questions that are either too heavy, too open-ended, or just not that interesting to answer. She may have seen it and moved on. Don't re-ask the same question — come back with something completely different.</div>
+    </div>
+    <div class="section-label">Your move</div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Send this — change the subject entirely</div>
+      "Forget I asked that. More important question — [lighter, fun question]."
+      <div class="coaching-note"><strong>Why it works:</strong> Acknowledges the skip without making it a big deal. Resets with something easier and more fun to engage with.</div>
+    </div>
+    <div class="text-bubble">
+      <div class="bubble-label neutral">Or this — answer your own question</div>
+      "Actually never mind — I'll just assume [funny assumption]. Prove me wrong."
+      <div class="coaching-note"><strong>Why it works:</strong> Relieves the pressure of having to answer. Playful challenge gives her an easy way back in.</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">For next time</div>
+      <div class="card-body">Ask questions that are easy and interesting to answer. Avoid: "What do you do for fun?" "What are you looking for?" "Why did you go on the app?" — these feel like work. Ask things she can answer quickly with a strong opinion.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: TIMING RULES ======================== -->
+<div class="panel" id="panel-timing">
+
+  <div class="intro-banner">
+    <h2>When to text. When to wait. When to stop.</h2>
+    <p>Timing is half the battle. Sending the right text at the wrong time kills it just as fast as the wrong text.</p>
+  </div>
+
+  <div class="section-label">Follow-up timing by situation</div>
+
+  <div class="timing-row">
+    <div class="timing-cell">
+      <div class="timing-time">Same<br>day</div>
+      <div class="timing-label">Only if convo was very active and you just got cut off</div>
+    </div>
+    <div class="timing-cell">
+      <div class="timing-time">24–48<br>hrs</div>
+      <div class="timing-label">Default window for most first-text or flirt situations</div>
+    </div>
+  </div>
+  <div class="timing-row">
+    <div class="timing-cell">
+      <div class="timing-time">2–3<br>days</div>
+      <div class="timing-label">After a date or after trying to set plans</div>
+    </div>
+    <div class="timing-cell">
+      <div class="timing-time">4–7<br>days</div>
+      <div class="timing-label">Dead convo revival or after long silence</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Rules to follow</div>
+
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">⏸</div>
+      <div class="rule-text"><strong>Never follow up same-day unless the convo was live</strong>Sending again within hours reads as anxious. Give it at least a full day unless she was actively texting you moments ago.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">📵</div>
+      <div class="rule-text"><strong>One follow-up maximum</strong>You get one shot to re-open. Two follow-ups with no reply = stop completely. Three is chasing. Chasing kills attraction.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🚪</div>
+      <div class="rule-text"><strong>After 2 no-replies, walk away clean</strong>No "I guess you're not interested," no last attempt. Just exit with your self-respect. She knows how to text.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🔕</div>
+      <div class="rule-text"><strong>Don't text while emotional</strong>If you're feeling rejected or anxious, wait. Texts written from that state almost always land wrong. Write it, wait 2 hours, then decide if you'd actually send it.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">📆</div>
+      <div class="rule-text"><strong>Weekends are better than weekdays for re-opens</strong>People are more relaxed, more likely to respond. Avoid Monday mornings or late Friday nights.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">When to fully let go</div>
+
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">✅</div>
+      <div class="rule-text"><strong>You've sent 2 texts with no reply</strong>That's your signal. She's seen them. Her silence is an answer.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">✅</div>
+      <div class="rule-text"><strong>She gives one-word replies to everything</strong>Low investment is not something you can fix by texting harder. You either meet up and change the energy in person — or you let it go.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">✅</div>
+      <div class="rule-text"><strong>She's cancelled or flaked twice</strong>One time, life happens. Twice means the effort is one-sided. Stop pursuing and redirect your energy.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: FIX TEXTS ======================== -->
+<div class="panel" id="panel-texts">
+
+  <div class="intro-banner">
+    <h2>Re-open texts that actually work</h2>
+    <p>These are categorized by approach. Pick the one that fits your energy and situation.</p>
+  </div>
+
+  <div class="section-label">Playful re-openers</div>
+
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Playful</div>
+    "You went quiet. I'm starting to think you don't miss me at all."
+    <div class="coaching-note"><strong>Why it works:</strong> Teases the silence instead of reacting to it. Implies she should miss you — which is confident framing.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Playful</div>
+    "I gave you a solid week to come back. I'm generous like that."
+    <div class="coaching-note"><strong>Why it works:</strong> Acknowledges the silence with humor and self-confidence. No desperation, no complaint.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Playful</div>
+    "Either you're really busy or you're bad at this. Tell me it's the first one."
+    <div class="coaching-note"><strong>Why it works:</strong> Light and fun. Creates a clear path for her to re-enter without it being awkward.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Direct re-openers</div>
+
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Direct</div>
+    "Still interested in meeting up?"
+    <div class="coaching-note"><strong>Why it works:</strong> One question. No filler. Forces a real answer. This is for when you've already been patient and playful.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Direct</div>
+    "Haven't heard from you in a while. Are we good?"
+    <div class="coaching-note"><strong>Why it works:</strong> Not needy — it's just honest. Shows you're grounded enough to ask directly without spiraling.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Direct</div>
+    "You went quiet. I'm going to assume life got busy — still want to connect?"
+    <div class="coaching-note"><strong>Why it works:</strong> Gives her a generous out (life got busy) without guilt. Clean, clear, one chance.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Date-forward re-openers</div>
+
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Date Push</div>
+    "We've been talking long enough. Let's actually meet. Thursday work for you?"
+    <div class="coaching-note"><strong>Why it works:</strong> Cuts through the back-and-forth and takes decisive action. Women respond to men who lead.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Date Push</div>
+    "Stop being a mystery and come get drinks with me this week."
+    <div class="coaching-note"><strong>Why it works:</strong> Playful and direct simultaneously. Flips the frame — she's the one being mysterious, not you.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Date Push</div>
+    "You owe me a conversation in person. What day works?"
+    <div class="coaching-note"><strong>Why it works:</strong> Light accountability without real pressure. Invites rather than demands. Clear next step built in.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Curiosity hooks</div>
+
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Curiosity</div>
+    "Something reminded me of you today. Guess what it was."
+    <div class="coaching-note"><strong>Why it works:</strong> Creates instant engagement. She has to respond to find out. Make the answer something real and fun — not forced.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Curiosity</div>
+    "I have a theory about why you went quiet. Want to hear it?"
+    <div class="coaching-note"><strong>Why it works:</strong> Hooks without pressure. She's curious about your theory — and it sets up a fun exchange where you can be playful about the silence.</div>
+  </div>
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Curiosity</div>
+    "Two things happened since we talked. One involves you. The other involves a questionable decision I made."
+    <div class="coaching-note"><strong>Why it works:</strong> Two hooks in one. She wants to know both. Make the story light and entertaining when she asks.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Last attempt — if nothing else worked</div>
+
+  <div class="text-bubble">
+    <div class="bubble-label neutral">Final Send</div>
+    "Okay — I'll leave you alone after this. Just wanted to say I thought we had something worth exploring. If you ever change your mind, you know where I am."
+    <div class="coaching-note"><strong>Why it works:</strong> Calm, dignified, no bitterness. Shows self-worth. Some women will actually respond to this after ignoring everything else — because it's real.</div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: WHAT NOT TO SEND ======================== -->
+<div class="panel" id="panel-avoid">
+
+  <div class="intro-banner">
+    <h2>These texts make it worse</h2>
+    <p>Most guys know what to say. They just forget when the anxiety hits. Don't send any of these.</p>
+  </div>
+
+  <div class="section-label">The texts that kill it</div>
+
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "???"
+    <div class="coaching-note"><strong>Why it fails:</strong> Passive-aggressive and desperate. It screams that her silence is affecting you emotionally. You become less attractive the moment you send it.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "Did I do something wrong?"
+    <div class="coaching-note"><strong>Why it fails:</strong> You're seeking reassurance instead of being grounded. It puts her in a weird position and makes the silence about your insecurity instead of just life.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "I feel like you're ignoring me and I don't know what I did to deserve that."
+    <div class="coaching-note"><strong>Why it fails:</strong> Guilt-tripping. Even if it's true, it creates pressure and resentment — not attraction. She'll double down on not responding.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "Hey" ... "You there?" ... "Just checking in" ... "I guess you're busy"
+    <div class="coaching-note"><strong>Why it fails:</strong> Multi-text chasing. Each one makes you look more desperate than the last. You're showing her that her silence controls your behavior.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "I can't believe you'd just ghost me after everything we talked about."
+    <div class="coaching-note"><strong>Why it fails:</strong> Anger and resentment texted to someone who is barely invested in you. It confirms she made the right call pulling back.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "I know you're probably busy but I just wanted to say I've really been thinking about you and I really feel like we had something special and I just don't want that to go away..."
+    <div class="coaching-note"><strong>Why it fails:</strong> Over-explaining and over-investing. Length signals anxiety. The more you explain how you feel, the less she wants to respond.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Never send this</div>
+    "Fine. I get it. Forget I said anything."
+    <div class="coaching-note"><strong>Why it fails:</strong> Passive-aggressive withdrawal. You're punishing her for not replying, which is immature and obvious. Exit clean or don't exit at all.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Common mistakes checklist</div>
+
+  <div class="card">
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Texting while emotional</strong> — Wait until you're calm. Every bad follow-up text was written from an emotional state.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Triple texting in one day</strong> — One follow-up, full stop. More than that is chasing.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Asking long boring questions</strong> — "What do you want in life?" is not attractive at this stage. Keep it light and easy.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Re-sending the same message</strong> — If it didn't get a reply the first time, sending it again is not the fix.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Apologizing for no reason</strong> — "Sorry to bother you" before your text signals that you don't believe you're worth her time.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Over-explaining your intentions</strong> — The more you explain, the more pressure she feels. Let your texts speak for themselves.</div>
+    </div>
+    <div class="check-item">
+      <div class="check-x">✗</div>
+      <div class="check-text"><strong>Making her silence mean you're not enough</strong> — Her silence is data, not a verdict. Don't hand a read receipt that kind of power over your state.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: MINDSET ======================== -->
+<div class="panel" id="panel-mindset">
+
+  <div class="intro-banner">
+    <h2>The texts are only part of it</h2>
+    <p>If your self-worth collapses when she goes quiet, no text is going to fix that. This is the deeper work.</p>
+  </div>
+
+  <div class="section-label">How to think about this</div>
+
+  <div class="mindset-chip">
+    <div class="chip-title">One read receipt is not rejection</div>
+    People get busy, lose their phone, get interrupted, get distracted. Don't let your brain turn a single silence into a story about you. It's data — incomplete data — not a verdict.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">Her response does not measure your worth</div>
+    This is the trap most men fall into. When your value is tied to her reply, you become approval-seeking — and approval-seeking repels women. Your worth doesn't need her confirmation.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">Silence is information, not an emergency</div>
+    When she goes quiet, the move is to stay calm, let time pass, and re-enter from a grounded place. Panicking and over-texting is a reaction to your own anxiety — not a response to her.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">The man who can walk away has all the power</div>
+    Needy behavior comes from a man who feels he has no options. When you genuinely have a full life — and you're genuinely okay if this one doesn't work — your texts change. Your energy changes. That's what she feels.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">Texting is not the whole game</div>
+    Too many men are trying to win through the screen. Texts create the bridge. The goal is always to get in front of her. If you can't get her to a meet-up, all the clever texts in the world don't matter.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">Lead. Don't react.</div>
+    Men who lead create forward movement. They make plans, they make offers, they make decisions. Men who react are always waiting on her to drive the energy. Be the one setting the direction.
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">When to walk away with your head up</div>
+
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">🧭</div>
+      <div class="rule-text"><strong>You've followed up once, cleanly</strong> — That's all you owe the situation. Anything beyond that is about your anxiety, not about her.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🧭</div>
+      <div class="rule-text"><strong>She's consistently low-investment</strong> — If every reply is a one-word answer and she never initiates, the energy isn't there. You can't create attraction through effort alone.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🧭</div>
+      <div class="rule-text"><strong>Walking away is a power move, not a loss</strong> — Most men beg for scraps. The man who can acknowledge the lack of interest and move on cleanly is rare — and women remember that.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🧭</div>
+      <div class="rule-text"><strong>Don't spiral. Redirect.</strong> — Feeling rejected is normal. Sitting in it and obsessing over her is not. Give yourself 24 hours, then redirect that energy toward your own life.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Want to go deeper?</div>
+  <div class="quiz-cta-block" style="margin-bottom:0;">
+    <div class="quiz-cta-tag">Free Community</div>
+    <div class="quiz-cta-title">Now that you know what to text — do you know how to get her number in the first place?</div>
+    <div class="quiz-cta-body">Join my free community and I'll show you exactly how to get her number so you have someone worth texting.</div>
+    <a href="https://www.skool.com/social-dynamics-group-5502/about" target="_blank" class="quiz-cta-btn">Join the Free Community →</a>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: PREVENT IT ======================== -->
+<div class="panel" id="panel-prevent">
+
+  <div class="intro-banner">
+    <h2>Stop getting left on read in the first place</h2>
+    <p>Most of these situations are preventable. Here's how to text in a way that keeps her engaged from the start.</p>
+  </div>
+
+  <div class="section-label">Text with purpose</div>
+
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">🎯</div>
+      <div class="rule-text"><strong>Every text should do something</strong> — Make her laugh, create curiosity, build tension, or move toward a plan. If it doesn't do one of those things, reconsider sending it.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🎯</div>
+      <div class="rule-text"><strong>Make your texts easy to reply to</strong> — Open-ended, heavy questions are work. Ask things she can answer quickly with an opinion, a laugh, or a single word.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🎯</div>
+      <div class="rule-text"><strong>Move toward the date sooner</strong> — Long text chains without a meetup lose steam. The more you text before meeting, the less exciting the idea of actually seeing you becomes.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🎯</div>
+      <div class="rule-text"><strong>Don't be her entertainment</strong> — If she's bored she'll text you. The second she feels entertained without effort, she can walk. Keep some things for in person.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🎯</div>
+      <div class="rule-text"><strong>Let there be gaps</strong> — Constant availability kills tension. Reply with intention, not instantly every time. She should never feel like you're waiting by your phone.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">First text mistakes that cause this</div>
+
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">Weak opener — kills it before it starts</div>
+    "Hey, how's your day going?"
+    <div class="coaching-note"><strong>Why it fails:</strong> Generic. She gets versions of this all day. There's nothing to respond to that matters. It signals low effort from the start.</div>
+  </div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">Weak opener</div>
+    "So what are you looking for on here?"
+    <div class="coaching-note"><strong>Why it fails:</strong> Heavy, interview-like, and immediately puts her in evaluation mode. Not how attraction works at the opener stage.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">Strong opener instead</div>
+    "Your [specific detail from profile] immediately disqualified you as a rational person. I'm intrigued."
+    <div class="coaching-note"><strong>Why it works:</strong> Specific, playful, shows you actually looked at her profile. Invites a fun defense from her — which starts real conversation.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">Strong opener instead</div>
+    "I have a theory about you based entirely on your photos. You ready to hear it?"
+    <div class="coaching-note"><strong>Why it works:</strong> Creates instant curiosity. She has to reply to find out. High engagement from the first message.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">The pattern to build</div>
+
+  <div class="card">
+    <div class="tree-node" style="margin-bottom:8px;">
+      <div class="tree-q">Step 1 — Hook her with the opener</div>
+      <div class="tree-a">Specific, curious, or playful. Give her something real to respond to.</div>
+    </div>
+    <div class="tree-node" style="margin-bottom:8px;">
+      <div class="tree-q">Step 2 — Build with banter and light flirt</div>
+      <div class="tree-a">Keep it fun. Don't rush. But don't drag it on for days either.</div>
+    </div>
+    <div class="tree-node" style="margin-bottom:8px;">
+      <div class="tree-q">Step 3 — Move toward a plan before momentum dies</div>
+      <div class="tree-a">Don't wait until the convo gets dry. Make the ask while the energy is still warm.</div>
+    </div>
+    <div class="tree-node">
+      <div class="tree-q">Step 4 — Keep texts short until you're face to face</div>
+      <div class="tree-a">Long texts before a first date are a common trap. Save the depth for when you're actually in front of her.</div>
+    </div>
+  </div>
+
+</div>
+
+</div>
+
+<!-- ======================== TAB: WHY SHE REALLY DID IT ======================== -->
+<div class="panel" id="panel-whyreally">
+
+  <div class="intro-banner">
+    <h2>Why she really left you on read</h2>
+    <p>Most guys think it's about the text. It's usually about the energy behind it. Here's what's actually going on.</p>
+  </div>
+
+  <div class="section-label">The surface reasons</div>
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">📵</div>
+      <div class="rule-text"><strong>She got distracted</strong>Life pulled her away mid-conversation. She saw your text, meant to reply later, and forgot. This is not rejection — it's just life.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">😐</div>
+      <div class="rule-text"><strong>Your text gave her nothing to respond to</strong>"Hey" and "how was your day" are conversation enders disguised as openers. If there's no hook, there's no reply.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">⚡</div>
+      <div class="rule-text"><strong>You responded too fast and killed the tension</strong>Instant replies signal you have nothing else going on. Tension requires distance. When you remove all distance, you remove the pull.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">📉</div>
+      <div class="rule-text"><strong>The conversation had no momentum</strong>Long back-and-forths with no direction drain interest. If every text is small talk with no forward movement, she stops seeing the point.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">👻</div>
+      <div class="rule-text"><strong>She was never that invested to begin with</strong>Sometimes the match, the number, the first conversation — it all happened when her interest was at its peak. By now it's faded. Not your fault. Move on.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">The real reason most guys keep getting left on read</div>
+
+  <div class="mindset-chip">
+    <div class="chip-title">You're texting from the wrong place</div>
+    When a man's self-worth is tied to her reply, it shows — not in what he says, but in how he says it. The desperation seeps through. The over-explaining. The follow-up too soon. The question that's really a plea for validation. She feels it before she can name it, and she pulls back.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">Approval-seeking energy repels</div>
+    Every text you send from a place of "please respond, I need to know you like me" is a text that makes her less likely to respond. Women are drawn to men who are outcome-independent — who text because they want to, not because they need something back.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">The fix isn't a better line — it's a better foundation</div>
+    You can have the perfect re-open text and still kill it if the energy behind it is needy. The goal isn't to trick her into replying. It's to become the kind of man whose texts she looks forward to — because he's genuinely interesting, genuinely unbothered, and genuinely has more going on than waiting on her screen.
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">What she's actually responding to</div>
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">✓</div>
+      <div class="rule-text"><strong>Confidence that doesn't need her confirmation</strong>A man who knows his own value doesn't spiral when she goes quiet. That steadiness is felt — and it's attractive.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">✓</div>
+      <div class="rule-text"><strong>Texts with direction and purpose</strong>She responds to men who text with intent — to make her laugh, to set a plan, to create a moment. Not to fill silence or seek reassurance.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">✓</div>
+      <div class="rule-text"><strong>A man with his own life</strong>When she can feel that you're not waiting by your phone — that you have things going on — your texts carry weight. Scarcity creates value. Availability destroys it.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: TEXT MAKEOVERS ======================== -->
+<div class="panel" id="panel-makeover">
+
+  <div class="intro-banner">
+    <h2>Before &amp; after text makeovers</h2>
+    <p>The same situation. Two completely different outcomes. See exactly what changes — and why it matters.</p>
+  </div>
+
+  <div class="section-label">Makeover 1 — The opener</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Hey! How's your week going? 😊"
+    <div class="coaching-note"><strong>What's wrong:</strong> Generic, low-effort, and easy to ignore. Every other guy is sending this. There's nothing to respond to that matters. The emoji signals insecurity, not warmth.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "Your taste in [thing from her profile] is either very good or very concerning. I can't decide yet."
+    <div class="coaching-note"><strong>Why it works:</strong> Specific, playful, creates a little tension. She has to respond to find out which way you're leaning. Shows you actually looked at her profile instead of copy-pasting the same opener to everyone.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 2 — The follow-up after silence</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Hey just checking in 😅 Did I say something wrong? I feel like you've been distant lately..."
+    <div class="coaching-note"><strong>What's wrong:</strong> Needy, anxious, and puts the emotional weight on her. She's now responsible for managing your feelings. That's pressure, not attraction.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "You went quiet on me. I'll assume life got crazy — still want to grab that coffee?"
+    <div class="coaching-note"><strong>Why it works:</strong> Acknowledges the silence without making it a big deal. Gives her a generous out. Moves straight toward a plan instead of dwelling on the gap.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 3 — Trying to set the date</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "So I was thinking maybe we could hang out sometime if you're free? No pressure, just let me know whenever works for you or whatever 😅"
+    <div class="coaching-note"><strong>What's wrong:</strong> Vague, over-hedged, and dripping with hesitation. "Sometime" is not a plan. "No pressure" signals you expect rejection. This gets a maybe, which becomes nothing.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "Let's actually make this happen. Thursday evening work for you?"
+    <div class="coaching-note"><strong>Why it works:</strong> Direct, decisive, specific. Men who lead get dates. She doesn't have to think — she just has to say yes or offer an alternative.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 4 — After the date</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Hey I just wanted to say I had such an amazing time last night, you're seriously so great and I can't stop thinking about it, I really hope we can do it again soon 🥺"
+    <div class="coaching-note"><strong>What's wrong:</strong> Over-invested and over-stated. It puts massive pressure on her response. One text has turned the whole date into a test she now has to pass.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "Good call on that place. Round 2 this weekend?"
+    <div class="coaching-note"><strong>Why it works:</strong> Casual, confident, and already moving forward. You liked the date. She knows. No analysis needed. The next move is already on the table.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 5 — Reviving a dead conversation</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Hey stranger 👋 it's been a while lol hope you're doing well"
+    <div class="coaching-note"><strong>What's wrong:</strong> This is the texting equivalent of showing up to a party and saying "so... yeah." "Hey stranger" is cringe. "Hope you're doing well" is filler. There's no hook, no energy, no reason to reply.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "Two things happened since we last talked. One of them reminded me of you. Guess which one."
+    <div class="coaching-note"><strong>Why it works:</strong> Instant curiosity. She has to respond to find out. No awkward "it's been a while" energy — you're just picking up with something interesting.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 6 — The double text</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Hey" / "You there?" / "Okay guess you're busy" / "Just let me know when you're free"
+    <div class="coaching-note"><strong>What's wrong:</strong> Four texts with no reply is not persistence — it's panic. Each one hands her more control over your emotional state. You've now shown her that her silence makes you spiral.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    [Send nothing. Wait 2 days. Then:] "Still down to meet up this week?"
+    <div class="coaching-note"><strong>Why it works:</strong> One clean follow-up after real space. No trail of anxious messages. You look unbothered — because you are. That's attractive.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 7 — Asking a boring question</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "So what do you like to do for fun?"
+    <div class="coaching-note"><strong>What's wrong:</strong> This is the most over-asked question in texting. She's answered it a hundred times. It's effort for her with no reward. Boring questions get boring replies — or no reply.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    "What's something you're weirdly good at that most people don't know?"
+    <div class="coaching-note"><strong>Why it works:</strong> Unexpected, specific, and actually interesting to answer. She gets to share something real about herself. That's the difference between an interview and a conversation.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Makeover 8 — When she gives a one-word reply</div>
+  <div class="text-bubble bad">
+    <div class="bubble-label bad">❌ Before</div>
+    "Oh haha cool. So what else is going on with you?"
+    <div class="coaching-note"><strong>What's wrong:</strong> You're doing all the work. "What else is going on" is a desperation move — you have nothing to say so you throw the burden back to her. One-word replies to one-word answers accelerates the fade.</div>
+  </div>
+  <div class="text-bubble good">
+    <div class="bubble-label good">✓ After</div>
+    Pull back. Match her energy or go quieter. If the pattern continues after 2 exchanges, shift to: "We should just meet up. What's your week like?"
+    <div class="coaching-note"><strong>Why it works:</strong> Stop trying to force a text connection that isn't flowing. Move toward something real. Low-energy texting is a sign to change the medium — not send more texts.</div>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: READ HER SIGNALS ======================== -->
+<div class="panel" id="panel-signals">
+
+  <div class="intro-banner">
+    <h2>Is she actually interested — or stringing you along?</h2>
+    <p>One read receipt doesn't tell you much. Her pattern does. Here's how to read what's really going on.</p>
+  </div>
+
+  <div class="section-label">Green flags — she's interested, life just got in the way</div>
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">🟢</div>
+      <div class="rule-text"><strong>She replies with substance when she does reply</strong>Even if delayed, her replies are real — asking questions back, sharing things, keeping the thread alive. Delay doesn't mean disinterest.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🟢</div>
+      <div class="rule-text"><strong>She's initiated at some point</strong>If she's texted you first at least once — even just once — she's thought about you unprompted. That's real interest.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🟢</div>
+      <div class="rule-text"><strong>She's apologized or explained the silence</strong>"Sorry been crazy at work" is not a red flag — it's someone who cares enough to acknowledge the gap. A woman who doesn't care just doesn't reply.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🟢</div>
+      <div class="rule-text"><strong>She references things from past conversations</strong>Callbacks show she's actually been thinking about what you said. That's investment — even if her reply timing is inconsistent.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🟢</div>
+      <div class="rule-text"><strong>She's said yes to a plan, even if it hasn't happened yet</strong>Agreeing to meet — even tentatively — is a signal she sees value in making something happen.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Red flags — she's stringing you along</div>
+  <div class="card">
+    <div class="rule-item">
+      <div class="rule-icon">🔴</div>
+      <div class="rule-text"><strong>Every reply is one word or an emoji</strong>That's not a busy person — that's a low-investment person. Real interest creates real replies. One-word answers are emotional exits.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🔴</div>
+      <div class="rule-text"><strong>She never asks you anything back</strong>Conversation is two-way. If you're always initiating and always asking and she never turns it back on you — she's not in it. She's just not saying no yet.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🔴</div>
+      <div class="rule-text"><strong>She's cancelled or been vague about plans more than once</strong>One time — life happens. Twice means the effort is consistently one-sided. Three times means she's comfortable letting you wait.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🔴</div>
+      <div class="rule-text"><strong>She only replies when you haven't texted in a while</strong>This is the "I'll keep you warm but I won't invest" pattern. She responds just enough to keep you around without ever actually moving things forward.</div>
+    </div>
+    <div class="rule-item">
+      <div class="rule-icon">🔴</div>
+      <div class="rule-text"><strong>She's never available but never says she's not interested</strong>Perpetual maybe is not interest — it's comfort. She likes knowing you're there. That's different from wanting to actually meet you.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">The honest question to ask yourself</div>
+  <div class="mindset-chip">
+    <div class="chip-title">Am I reading interest — or am I inventing it?</div>
+    When you really like someone, it's easy to explain away every red flag and magnify every green one. The question isn't "is there any chance she's interested?" The question is: "Is her behavior — consistently, over time — showing me she wants this to go somewhere?" If the answer is no, no text is going to fix that.
+  </div>
+  <div class="mindset-chip">
+    <div class="chip-title">The clarity test</div>
+    If you're unsure, send one direct message: "Are we still on for meeting up?" or "Do you actually want to hang out?" Her answer — or her non-answer — will tell you everything. A woman who's genuinely interested will not let clarity scare her away.
+  </div>
+
+</div>
+
+<!-- ======================== TAB: SWIPE FILE ======================== -->
+<div class="panel" id="panel-swipe">
+
+  <div class="intro-banner">
+    <h2>Copy-paste swipe file</h2>
+    <p>Ready to send. No editing needed. Just pick the one that fits your situation and go.</p>
+  </div>
+
+  <div class="section-label">Re-open after silence</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"You went quiet. I'll assume life got crazy — still want to meet up?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Haven't heard from you. Are we still on?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I gave you a whole week to come back. You're welcome."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"You disappeared on me. I'll let it slide — this time."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Still thinking about grabbing that drink. You in or out?"</div>
+
+  <div class="divider"></div>
+  <div class="section-label">Date push texts</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"We've been talking long enough. Let's actually meet. Thursday work?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Stop being a mystery. Come get coffee with me this week."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Just coffee. 45 minutes. You don't even have to bring your A-game."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I know a spot you'd actually like. Free Saturday?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Let's make this happen before we talk ourselves out of it. When are you free?"</div>
+
+  <div class="divider"></div>
+  <div class="section-label">Curiosity hooks</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Something reminded me of you today. Guess what it was."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I have a theory about you. Want to hear it?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Two things happened this week. One of them involves you. Guess which."</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I just found out something about you. Confirm or deny: [fun assumption]."</div>
+
+  <div class="divider"></div>
+  <div class="section-label">After the date</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Good call on that place. Round 2 this weekend?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Had a good time. We should do it again — what's your week look like?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"That was better than expected. You can come again."</div>
+
+  <div class="divider"></div>
+  <div class="section-label">Dead convo revival</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"Long overdue — we should actually hang. What's your week look like?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I know we disappeared on each other. Honestly your fault. Want to make it up to me?"</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"We never finished that conversation. Pick up where we left off?"</div>
+
+  <div class="divider"></div>
+  <div class="section-label">Final send — if nothing else worked</div>
+  <div class="text-bubble"><div class="bubble-label neutral">Swipe</div>"I'll leave you alone after this. Just wanted to say I thought we had something worth exploring. If you ever change your mind, you know where I am."</div>
+
+</div>
+
+<!-- ======================== TAB: 7 RULES ======================== -->
+<div class="panel" id="panel-rules">
+
+  <div class="intro-banner">
+    <h2>The 7 rules — screenshot this</h2>
+    <p>Everything in this tool comes down to these. Read them. Remember them. Use them every time.</p>
+  </div>
+
+  <div class="card" style="padding: 6px 16px;">
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">1</div>
+      <div class="rule-text"><strong>One follow-up. Maximum.</strong>You get one shot to re-open. After that, you've done your part. More texts is chasing. Chasing destroys attraction.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">2</div>
+      <div class="rule-text"><strong>Never text while emotional.</strong>If you're feeling rejected, anxious, or angry — wait. Every bad text in history was written in that state. Give it two hours minimum before you decide to send anything.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">3</div>
+      <div class="rule-text"><strong>Her silence is data, not a verdict.</strong>One read receipt doesn't mean you're rejected. It means she hasn't replied yet. Don't write a story around incomplete information.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">4</div>
+      <div class="rule-text"><strong>Move toward the date before momentum dies.</strong>Don't let the text chain run for weeks. The longer you wait to ask, the harder it gets. Make the move while the energy is still warm.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">5</div>
+      <div class="rule-text"><strong>Your worth is not her reply.</strong>The moment her response controls your emotional state, you've handed her the power. Stay grounded. A man with real self-worth doesn't spiral over a read receipt.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">6</div>
+      <div class="rule-text"><strong>Text with purpose, not desperation.</strong>Every text should make her laugh, create curiosity, build tension, or move toward a plan. If it doesn't do one of those things — don't send it.</div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon" style="font-size:20px; min-width:32px; text-align:center;">7</div>
+      <div class="rule-text"><strong>Walk away clean when it's time.</strong>No final guilt trip. No passive-aggressive exit. Two no-replies means the conversation is over. Exit with your self-respect intact. That's the move.</div>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="mindset-chip">
+    <div class="chip-title">The rule behind all the rules</div>
+    Every mistake men make over text comes from the same place — needing her to respond in order to feel okay. When you fix that, the tactics handle themselves. You stop over-texting because you don't need the validation. You stop sending bad follow-ups because you're not panicking. You stop chasing because you actually believe you're worth pursuing. That's the real work.
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Want to go deeper?</div>
+  <div class="quiz-cta-block" style="margin-bottom:0;">
+    <div class="quiz-cta-tag">Free Community</div>
+    <div class="quiz-cta-title">Now that you know what to text — do you know how to get her number in the first place?</div>
+    <div class="quiz-cta-body">Join my free community and I'll show you exactly how to get her number so you have someone worth texting.</div>
+    <a href="https://www.skool.com/social-dynamics-group-5502/about" target="_blank" class="quiz-cta-btn">Join the Free Community →</a>
+  </div>
+
+</div>
+
+<!-- ======================== TAB: QUIZ ======================== -->
+<div class="panel" id="panel-quiz">
+
+  <div id="quiz-questions">
+    <div class="intro-banner">
+      <h2>Test your texting IQ</h2>
+      <p>10 questions. Real scenarios. Find out if you'd actually handle it right — or if you're making the same mistakes that keep guys stuck.</p>
+    </div>
+
+    <div class="quiz-progress-bar"><div class="quiz-progress-fill" id="quiz-progress"></div></div>
+
+    <!-- Q1 -->
+    <div class="quiz-q-block" id="qblock-0">
+      <div class="quiz-q-num">Question 1 of 10</div>
+      <div class="quiz-q-text">She left you on read 3 hours after you texted her. What do you do?</div>
+      <div class="quiz-option" onclick="selectAnswer(0, 0, false)"><span class="opt-letter">A</span>Send "??" to see if she got it</div>
+      <div class="quiz-option" onclick="selectAnswer(0, 1, true)"><span class="opt-letter">B</span>Nothing — wait at least 24 hours before any follow-up</div>
+      <div class="quiz-option" onclick="selectAnswer(0, 2, false)"><span class="opt-letter">C</span>Send a longer, more interesting message right away</div>
+      <div class="quiz-option" onclick="selectAnswer(0, 3, false)"><span class="opt-letter">D</span>Ask her if you said something wrong</div>
+      <div class="quiz-feedback" id="qfb-0"><strong>Correct.</strong> Three hours is nothing. People get pulled away constantly. Reacting within the same day signals that her silence is already controlling your mood — which is the fastest way to kill attraction. Give it space.</div>
+    </div>
+
+    <!-- Q2 -->
+    <div class="quiz-q-block" id="qblock-1">
+      <div class="quiz-q-num">Question 2 of 10</div>
+      <div class="quiz-q-text">You've already sent one follow-up with no reply. What's the right move?</div>
+      <div class="quiz-option" onclick="selectAnswer(1, 0, false)"><span class="opt-letter">A</span>Send one more — maybe she just forgot</div>
+      <div class="quiz-option" onclick="selectAnswer(1, 1, false)"><span class="opt-letter">B</span>Send a long message explaining how you feel</div>
+      <div class="quiz-option" onclick="selectAnswer(1, 2, true)"><span class="opt-letter">C</span>Stop texting. You've done your part — the ball is in her court</div>
+      <div class="quiz-option" onclick="selectAnswer(1, 3, false)"><span class="opt-letter">D</span>Send a "fine, forget it" message and move on</div>
+      <div class="quiz-feedback" id="qfb-1"><strong>Correct.</strong> One follow-up is the maximum. A second one after no reply is chasing. She's seen your message — she knows how to respond if she wants to. More texts won't convince her. They'll just confirm she made the right call pulling back.</div>
+    </div>
+
+    <!-- Q3 -->
+    <div class="quiz-q-block" id="qblock-2">
+      <div class="quiz-q-num">Question 3 of 10</div>
+      <div class="quiz-q-text">Which of these is the best re-open text after 2 days of silence?</div>
+      <div class="quiz-option" onclick="selectAnswer(2, 0, false)"><span class="opt-letter">A</span>"Hey, you there?"</div>
+      <div class="quiz-option" onclick="selectAnswer(2, 1, false)"><span class="opt-letter">B</span>"I don't know why you're ignoring me but it's pretty rude."</div>
+      <div class="quiz-option" onclick="selectAnswer(2, 2, true)"><span class="opt-letter">C</span>"You disappeared on me. I'll let it slide — this time."</div>
+      <div class="quiz-option" onclick="selectAnswer(2, 3, false)"><span class="opt-letter">D</span>"I was really hoping to hear from you. Hope you're okay."</div>
+      <div class="quiz-feedback" id="qfb-2"><strong>Correct.</strong> Option C acknowledges the silence with humor and confidence instead of reacting to it with anxiety or passive aggression. It's easy for her to respond to, and it doesn't hand her emotional power over you. "Hey, you there?" is weak. Anger and guilt-tripping repel. Vulnerability this early comes across as neediness.</div>
+    </div>
+
+    <!-- Q4 -->
+    <div class="quiz-q-block" id="qblock-3">
+      <div class="quiz-q-num">Question 4 of 10</div>
+      <div class="quiz-q-text">The date went well — you both laughed a lot and she said she had fun. She hasn't texted since. How long do you wait before following up?</div>
+      <div class="quiz-option" onclick="selectAnswer(3, 0, false)"><span class="opt-letter">A</span>A few hours — strike while the iron is hot</div>
+      <div class="quiz-option" onclick="selectAnswer(3, 1, true)"><span class="opt-letter">B</span>1 to 2 days — then a confident, forward follow-up</div>
+      <div class="quiz-option" onclick="selectAnswer(3, 2, false)"><span class="opt-letter">C</span>Wait for her to text first — she should make the effort</div>
+      <div class="quiz-option" onclick="selectAnswer(3, 3, false)"><span class="opt-letter">D</span>A week — don't seem too eager</div>
+      <div class="quiz-feedback" id="qfb-3"><strong>Correct.</strong> 1 to 2 days is the sweet spot after a date. Following up within hours can feel needy. Waiting a full week sends mixed signals. And waiting for her to text first is passive — leaders initiate. One clean message: affirm the time, propose the next one.</div>
+    </div>
+
+    <!-- Q5 -->
+    <div class="quiz-q-block" id="qblock-4">
+      <div class="quiz-q-num">Question 5 of 10</div>
+      <div class="quiz-q-text">She was responding warmly for days — then suddenly went cold with one-word replies. What does this most likely mean?</div>
+      <div class="quiz-option" onclick="selectAnswer(4, 0, false)"><span class="opt-letter">A</span>She's definitely lost interest and you should move on immediately</div>
+      <div class="quiz-option" onclick="selectAnswer(4, 1, false)"><span class="opt-letter">B</span>You must have said something wrong — review all your texts</div>
+      <div class="quiz-option" onclick="selectAnswer(4, 2, true)"><span class="opt-letter">C</span>Her interest level is fluctuating — could be life, competing attention, or uncertainty</div>
+      <div class="quiz-option" onclick="selectAnswer(4, 3, false)"><span class="opt-letter">D</span>She's testing you to see how you react</div>
+      <div class="quiz-feedback" id="qfb-4"><strong>Correct.</strong> Hot and cold doesn't always mean gone. Life gets in the way. Other guys enter the picture. Moods shift. The mistake is treating this as a final verdict and either chasing or spiraling. Stay grounded, give it a few days, and re-open with energy — not anxiety.</div>
+    </div>
+
+    <!-- Q6 -->
+    <div class="quiz-q-block" id="qblock-5">
+      <div class="quiz-q-num">Question 6 of 10</div>
+      <div class="quiz-q-text">You asked her a question and she never answered. What's your next move?</div>
+      <div class="quiz-option" onclick="selectAnswer(5, 0, false)"><span class="opt-letter">A</span>Re-ask the same question with more context</div>
+      <div class="quiz-option" onclick="selectAnswer(5, 1, false)"><span class="opt-letter">B</span>Ask her why she didn't answer</div>
+      <div class="quiz-option" onclick="selectAnswer(5, 2, true)"><span class="opt-letter">C</span>Drop it completely and re-open with something totally different</div>
+      <div class="quiz-option" onclick="selectAnswer(5, 3, false)"><span class="opt-letter">D</span>Wait indefinitely until she answers</div>
+      <div class="quiz-feedback" id="qfb-5"><strong>Correct.</strong> If a question didn't get answered, re-asking it just draws attention to the fact she ignored it — awkward for both of you. Start fresh. A playful new angle or a light callback resets the energy without making the skipped question a bigger deal than it is.</div>
+    </div>
+
+    <!-- Q7 -->
+    <div class="quiz-q-block" id="qblock-6">
+      <div class="quiz-q-num">Question 7 of 10</div>
+      <div class="quiz-q-text">Which of these openers is most likely to get a reply?</div>
+      <div class="quiz-option" onclick="selectAnswer(6, 0, false)"><span class="opt-letter">A</span>"Hey, how's your week going?"</div>
+      <div class="quiz-option" onclick="selectAnswer(6, 1, false)"><span class="opt-letter">B</span>"What are you looking for on here?"</div>
+      <div class="quiz-option" onclick="selectAnswer(6, 2, true)"><span class="opt-letter">C</span>"I have a theory about you based on your photos. You ready to hear it?"</div>
+      <div class="quiz-option" onclick="selectAnswer(6, 3, false)"><span class="opt-letter">D</span>"You're really pretty 😊"</div>
+      <div class="quiz-feedback" id="qfb-6"><strong>Correct.</strong> Option C creates immediate curiosity — she almost has to respond to find out what the theory is. "Hey how's your week" is forgettable. "What are you looking for" is heavy and interview-like. Complimenting her looks is what every other guy is doing. Stand out by making her curious, not comfortable.</div>
+    </div>
+
+    <!-- Q8 -->
+    <div class="quiz-q-block" id="qblock-7">
+      <div class="quiz-q-num">Question 8 of 10</div>
+      <div class="quiz-q-text">You feel anxious and rejected after being left on read. You've written a text explaining how you feel. Should you send it?</div>
+      <div class="quiz-option" onclick="selectAnswer(7, 0, false)"><span class="opt-letter">A</span>Yes — honesty and vulnerability are attractive</div>
+      <div class="quiz-option" onclick="selectAnswer(7, 1, true)"><span class="opt-letter">B</span>No — wait until you're calm, then decide if it's actually worth sending</div>
+      <div class="quiz-option" onclick="selectAnswer(7, 2, false)"><span class="opt-letter">C</span>Yes — she needs to know where you stand</div>
+      <div class="quiz-option" onclick="selectAnswer(7, 3, false)"><span class="opt-letter">D</span>Send it but edit it to sound less emotional first</div>
+      <div class="quiz-feedback" id="qfb-7"><strong>Correct.</strong> Texts written from anxiety almost always make things worse. The rule: write it, wait two hours minimum, then re-read it from a neutral state. Most of the time you won't send it — and you'll be grateful you didn't. Vulnerability is powerful in person. Over text after a silence, it reads as pressure.</div>
+    </div>
+
+    <!-- Q9 -->
+    <div class="quiz-q-block" id="qblock-8">
+      <div class="quiz-q-num">Question 9 of 10</div>
+      <div class="quiz-q-text">You've been texting for two weeks with no meetup. The conversation is starting to feel flat. What's the core problem?</div>
+      <div class="quiz-option" onclick="selectAnswer(8, 0, false)"><span class="opt-letter">A</span>You're not being funny or interesting enough in your texts</div>
+      <div class="quiz-option" onclick="selectAnswer(8, 1, false)"><span class="opt-letter">B</span>She's not really interested</div>
+      <div class="quiz-option" onclick="selectAnswer(8, 2, true)"><span class="opt-letter">C</span>You waited too long to move toward a real plan — the momentum died</div>
+      <div class="quiz-option" onclick="selectAnswer(8, 3, false)"><span class="opt-letter">D</span>You texted too much and gave her too much to respond to</div>
+      <div class="quiz-feedback" id="qfb-8"><strong>Correct.</strong> Long text chains without a meetup lose energy. The more you text before meeting, the more the idea of actually seeing you becomes ordinary — there's nothing new to discover. Move toward the date while the energy is still warm. Texts are a bridge to the real thing, not a substitute for it.</div>
+    </div>
+
+    <!-- Q10 -->
+    <div class="quiz-q-block" id="qblock-9">
+      <div class="quiz-q-num">Question 10 of 10</div>
+      <div class="quiz-q-text">She's cancelled twice and takes days to reply. You still like her. What's the honest answer here?</div>
+      <div class="quiz-option" onclick="selectAnswer(9, 0, false)"><span class="opt-letter">A</span>Keep pursuing — consistency will eventually win her over</div>
+      <div class="quiz-option" onclick="selectAnswer(9, 1, false)"><span class="opt-letter">B</span>Tell her how you feel and ask if she's actually interested</div>
+      <div class="quiz-option" onclick="selectAnswer(9, 2, true)"><span class="opt-letter">C</span>Withdraw your energy — the effort is one-sided and chasing won't fix that</div>
+      <div class="quiz-option" onclick="selectAnswer(9, 3, false)"><span class="opt-letter">D</span>Give it one more week of full effort before deciding</div>
+      <div class="quiz-feedback" id="qfb-9"><strong>Correct.</strong> Two cancellations and slow replies are a pattern, not a coincidence. Continuing to invest when someone is consistently low-effort doesn't build attraction — it builds a dynamic where you chase and she sets the terms. Withdrawing your energy is not giving up. It's having standards. Sometimes that shift alone changes her behavior.</div>
+    </div>
+
+    <button class="quiz-submit-btn" id="quiz-submit" onclick="submitQuiz()" disabled>See My Results</button>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="quiz-result" id="quiz-result">
+    <div class="quiz-score-ring" id="score-ring">
+      <div class="quiz-score-num" id="score-num">0/10</div>
+      <div class="quiz-score-label">correct</div>
+    </div>
+    <div class="quiz-grade-title" id="grade-title"></div>
+    <div class="quiz-grade-sub" id="grade-sub"></div>
+
+    <div id="quiz-cta" style="display:none;">
+      <div class="quiz-cta-block">
+        <div class="quiz-cta-tag">Free Community</div>
+        <div class="quiz-cta-title">Now that you know what to text — do you know how to get her number in the first place?</div>
+        <div class="quiz-cta-body">Join my free community and I'll show you exactly how to get her number so you have someone worth texting.</div>
+        <a href="https://www.skool.com/social-dynamics-group-5502/about" target="_blank" class="quiz-cta-btn">Join the Free Community →</a>
+      </div>
+    </div>
+
+    <div class="quiz-breakdown">
+      <div class="quiz-breakdown-title">Question Breakdown</div>
+      <div id="breakdown-rows"></div>
+    </div>
+
+    <button class="quiz-retake-btn" onclick="retakeQuiz()">↺ Retake Quiz</button>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    const tabs = document.querySelectorAll('.tab');
+    const map = { situation:0, timing:1, texts:2, avoid:3, mindset:4, prevent:5, whyreally:6, makeover:7, signals:8, swipe:9, rules:10, quiz:11 };
+    tabs[map[name]].classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function showSit(id) {
+    document.getElementById('sit-menu').style.display = 'none';
+    document.querySelectorAll('.where-result').forEach(r => r.classList.remove('show'));
+    const el = document.getElementById('sit-' + id);
+    if (el) el.classList.add('show');
+    window.scrollTo(0, 0);
+  }
+
+  function backToMenu() {
+    document.getElementById('sit-menu').style.display = 'block';
+    document.querySelectorAll('.where-result').forEach(r => r.classList.remove('show'));
+    window.scrollTo(0, 0);
+  }
+
+  // QUIZ LOGIC
+  const quizAnswers = new Array(10).fill(null);
+  const quizShortLabels = [
+    "She left you on read for 3 hours",
+    "You already sent one follow-up",
+    "Best re-open after 2 days silence",
+    "Date went well — no text since",
+    "Warm then suddenly cold",
+    "She never answered your question",
+    "Best opener to get a reply",
+    "You wrote an emotional text",
+    "Two weeks texting, no meetup",
+    "She cancelled twice, slow replies"
+  ];
+
+  function selectAnswer(qIndex, optIndex, isCorrect) {
+    const block = document.getElementById('qblock-' + qIndex);
+    if (block.classList.contains('answered')) return;
+    block.classList.add('answered');
+
+    const opts = block.querySelectorAll('.quiz-option');
+    opts.forEach(o => o.classList.add('disabled'));
+
+    if (isCorrect) {
+      opts[optIndex].classList.add('selected-correct');
+      quizAnswers[qIndex] = true;
+    } else {
+      opts[optIndex].classList.add('selected-wrong');
+      quizAnswers[qIndex] = false;
+      // Reveal correct answer
+      opts.forEach(o => {
+        o.addEventListener('click', function dummy(){}, {once:true});
+      });
+      // Find correct option and highlight
+      const correctMap = [1,2,2,1,2,2,2,1,2,2];
+      opts[correctMap[qIndex]].classList.add('reveal-correct');
+    }
+
+    const fb = document.getElementById('qfb-' + qIndex);
+    if (fb) fb.classList.add('show');
+
+    // Update progress
+    const answered = quizAnswers.filter(a => a !== null).length;
+    document.getElementById('quiz-progress').style.width = (answered / 10 * 100) + '%';
+
+    if (answered === 10) {
+      document.getElementById('quiz-submit').disabled = false;
+    }
+  }
+
+  function submitQuiz() {
+    const score = quizAnswers.filter(a => a === true).length;
+    document.getElementById('quiz-questions').style.display = 'none';
+    const result = document.getElementById('quiz-result');
+    result.classList.add('show');
+
+    document.getElementById('score-num').textContent = score + '/10';
+
+    const ring = document.getElementById('score-ring');
+    const title = document.getElementById('grade-title');
+    const sub = document.getElementById('grade-sub');
+
+    ring.className = 'quiz-score-ring';
+
+    if (score <= 3) {
+      ring.classList.add('grade-bad');
+      title.textContent = "You're Flying Blind";
+      sub.textContent = "You're making the same moves that keep guys stuck — reacting out of anxiety instead of leading with confidence. The good news? These are all learned behaviors. Every pattern you're falling into is fixable once you see it clearly. Start with the Mindset tab and the What NOT to Send tab. The shift starts there.";
+    } else if (score <= 5) {
+      ring.classList.add('grade-mid');
+      title.textContent = "You Know Some of It";
+      sub.textContent = "You've picked up some of the right ideas, but you're still getting tripped up by the emotional side of it — the moments when anxiety takes the wheel. Knowing what to do and actually doing it under pressure are two different things. Review the questions you missed and pay attention to why the right answer works, not just what it is.";
+    } else if (score <= 7) {
+      ring.classList.add('grade-good');
+      title.textContent = "You're Getting It";
+      sub.textContent = "Solid score. You understand the fundamentals — you're not chasing, not over-texting, not letting her silence control you. The gaps are in the fine details: timing, framing, knowing exactly which approach fits which situation. Use the Situation tab to sharpen those edges. You're close.";
+    } else if (score <= 9) {
+      ring.classList.add('grade-great');
+      title.textContent = "Strong Instincts";
+      sub.textContent = "You've internalized most of this. You know when to hold back, when to lead, and how to re-engage without giving up your self-respect. The small misses are just refinements — not fundamental problems. Keep working the Prevent It tab so you're stopping these situations before they start.";
+    } else {
+      ring.classList.add('grade-great');
+      title.textContent = "You've Got This Locked";
+      sub.textContent = "Perfect score. You understand both the tactics and the mindset behind them. You're not reacting — you're leading. The real question now isn't what to text. It's whether your overall approach to women reflects this same level of clarity. Use everything in this tool as a reference and keep raising your standard.";
+    }
+
+    if (score >= 6) {
+      const cta = document.getElementById('quiz-cta');
+      if (cta) cta.style.display = 'block';
+    }
+
+    // Breakdown
+    const rows = document.getElementById('breakdown-rows');
+    rows.innerHTML = '';
+    quizAnswers.forEach((correct, i) => {
+      const row = document.createElement('div');
+      row.className = 'qb-row';
+      row.innerHTML = `<div class="qb-q">Q${i+1}: ${quizShortLabels[i]}</div><div class="qb-result ${correct ? 'correct' : 'wrong'}">${correct ? '✓' : '✗'}</div>`;
+      rows.appendChild(row);
+    });
+
+    window.scrollTo(0, 0);
+  }
+
+  function retakeQuiz() {
+    quizAnswers.fill(null);
+    document.getElementById('quiz-questions').style.display = 'block';
+    document.getElementById('quiz-result').classList.remove('show');
+    document.getElementById('quiz-submit').disabled = true;
+    document.getElementById('quiz-progress').style.width = '0%';
+    const cta = document.getElementById('quiz-cta');
+    if (cta) cta.style.display = 'none';
+
+    for (let i = 0; i < 10; i++) {
+      const block = document.getElementById('qblock-' + i);
+      block.classList.remove('answered');
+      block.querySelectorAll('.quiz-option').forEach(o => {
+        o.classList.remove('selected-correct','selected-wrong','reveal-correct','disabled');
+      });
+      const fb = document.getElementById('qfb-' + i);
+      if (fb) fb.classList.remove('show');
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // Situation accordion (kept for potential future use)
+  document.querySelectorAll('.situation-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const expand = this.nextElementSibling;
+      const isOpen = this.classList.contains('open');
+      document.querySelectorAll('.situation-btn').forEach(b => b.classList.remove('open'));
+      document.querySelectorAll('.situation-expand').forEach(e => e.classList.remove('open'));
+      if (!isOpen) {
+        this.classList.add('open');
+        if (expand && expand.classList.contains('situation-expand')) {
+          expand.classList.add('open');
+        }
+      }
+    });
+  });
+</script>
+</body>
+</html>
